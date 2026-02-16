@@ -40,6 +40,8 @@ jobs:
         with:
           directory: terraform/
           framework: terraform
+          soft_fail: false
+          output_format: cli
 
       - name: Terraform Plan
         run: terraform -chdir=${{ env.TF_WORKING_DIR }} plan -out=tfplan
