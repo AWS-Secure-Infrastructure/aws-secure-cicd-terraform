@@ -19,7 +19,9 @@ No static AWS credentials are used.
 
 ---
 
-## Architecture
+## Architecture Design
+
+![VPC Architecture](diagram.png)
 
 GitHub → GitHub Actions → OIDC → AWS IAM Role  
 → Terraform Init/Validate  
