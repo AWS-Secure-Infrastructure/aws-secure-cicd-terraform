@@ -94,3 +94,9 @@ No IAM users or long-lived secrets.
 ## Purpose
 
 This repository demonstrates secure infrastructure delivery patterns aligned with modern DevSecOps and platform engineering practices.
+
+--- 
+
+## Author
+
+Sebastian Silva C. - Cloud Engineer – Secure Infrastructure & Automation - Berlin, Germany
