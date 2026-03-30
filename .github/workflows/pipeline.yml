@@ -1,60 +1,65 @@
-name: Secure Terraform CI/CD
+name: EKS Secure Baseline Pipeline
 
 on:
   pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
 
 permissions:
-  id-token: write
+  id-token: write   # Required for OIDC federation
   contents: read
 
 env:
-  TF_WORKING_DIR: terraform/environments/prod
+  TERRAFORM_ROOT: terraform
+  ENVIRONMENT: prod
   AWS_REGION: eu-central-1
 
 jobs:
   plan:
-    name: Terraform Plan
+    name: Terraform Plan (PR Validation)
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Terraform
+      - name: Setup Terraform CLI
         uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.x
 
       - name: Terraform Format Check
-        run: terraform -chdir=${{ env.TF_WORKING_DIR }} fmt -check
+        run: terraform -chdir=${{ env.TERRAFORM_ROOT }} fmt -check -recursive
 
       - name: Terraform Init
-        run: terraform -chdir=${{ env.TF_WORKING_DIR }} init
+        run: terraform -chdir=${{ env.TERRAFORM_ROOT }} init -input=false
 
       - name: Terraform Validate
-        run: terraform -chdir=${{ env.TF_WORKING_DIR }} validate
+        run: terraform -chdir=${{ env.TERRAFORM_ROOT }} validate
 
-      - name: Run Checkov Security Scan
+      - name: Static Security Scan (Checkov)
         uses: bridgecrewio/checkov-action@v12
         with:
-          directory: terraform/
+          directory: ${{ env.TERRAFORM_ROOT }}
           framework: terraform
           soft_fail: false
           output_format: cli
 
       - name: Terraform Plan
-        run: terraform -chdir=${{ env.TF_WORKING_DIR }} plan -out=tfplan
+        run: terraform -chdir=${{ env.TERRAFORM_ROOT }} plan -out=tfplan
 
       - name: Upload Plan Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: terraform-plan
-          path: ${{ env.TF_WORKING_DIR }}/tfplan
+          name: eks-secure-baseline-plan
+          path: ${{ env.TERRAFORM_ROOT }}/tfplan
 
 
   apply:
-    name: Terraform Apply
+    name: Terraform Apply (Production)
     needs: plan
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
@@ -63,26 +68,28 @@ jobs:
       name: production
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Terraform
+      - name: Setup Terraform CLI
         uses: hashicorp/setup-terraform@v3
-
-      - name: Download Plan Artifact
-        uses: actions/download-artifact@v4
         with:
-          name: terraform-plan
-          path: ${{ env.TF_WORKING_DIR }}
+          terraform_version: 1.6.x
 
-      - name: Configure AWS Credentials (OIDC)
+      - name: Configure AWS Credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Download Approved Plan
+        uses: actions/download-artifact@v4
+        with:
+          name: eks-secure-baseline-plan
+          path: ${{ env.TERRAFORM_ROOT }}
+
       - name: Terraform Init
-        run: terraform -chdir=${{ env.TF_WORKING_DIR }} init
+        run: terraform -chdir=${{ env.TERRAFORM_ROOT }} init -input=false
 
       - name: Terraform Apply
-        run: terraform -chdir=${{ env.TF_WORKING_DIR }} apply -auto-approve tfplan
+        run: terraform -chdir=${{ env.TERRAFORM_ROOT }} apply -auto-approve tfplan
